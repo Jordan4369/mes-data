@@ -1,0 +1,39 @@
+name: MES data
+
+on:
+  schedule:
+    - cron: "10,40 * * * 0-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance
+      - name: Download ES candles
+        run: |
+          python - <<'EOF'
+          import os, yfinance as yf
+          os.makedirs("data", exist_ok=True)
+          for sym, name in [("ES=F", "es"), ("^VIX", "vix")]:
+              for itv, per in [("1h", "20d"), ("15m", "5d")]:
+                  df = yf.download(sym, interval=itv, period=per, progress=False,
+                                   auto_adjust=False, multi_level_index=False)
+                  if len(df):
+                      df.to_csv(f"data/{name}_{itv}.csv")
+                      print(name, itv, len(df))
+          EOF
+      - name: Commit
+        run: |
+          git config user.name "mes-bot"
+          git config user.email "mes-bot@users.noreply.github.com"
+          git add data
+          git commit -m "update data" || exit 0
+          git push
